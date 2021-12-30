@@ -1,0 +1,182 @@
+pipeline{
+    agent any
+    environment{
+        AWS_ACCESS_KEY_ID=credentials('awsaccesskey')
+        AWS_SECRET_ACCESS_KEY=credentials('awssecretkey')
+        AWS_DEFAULT_REGION="us-east-1"
+        SKIP="N"
+        TERRADESTROY="Y"
+        FIRST_DEPLOY="Y"
+        SKIPFLAG="N"
+    }
+
+    stages{
+
+        stage("Deploy Lambda2"){
+            parallel{
+                stage('Deploy All Lambdas'){
+                    when{
+                        environment name:'TERRADESTROY',value:'N'
+                    }
+                    stages{
+                        stage('Validate Infra'){
+                            steps{
+                                sh '''
+                                terraform init
+                                terraform validate'''
+                            }
+                        }
+                        stage('Deploy Lambda code'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform plan -out outfile
+                                terraform apply outfile'''
+                            }
+                        }
+                        stage('Deploy Lambda 1 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'N'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda1_githubtos3.module.lambda_function_local.aws_lambda_function.this[0]" -replace="aws_s3_bucket_object.lambda1_code" -auto-approve'''
+                            }
+                        }
+                        stage('Deploy Lambda 2 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda2_countdyna.module.lambda_function_local.aws_lambda_function.this[0]" -replace="aws_s3_bucket_object.lambda_code" -auto-approve'''
+                            }
+                        }
+                        stage('Deploy Lambda 3 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda3-preglue-deltajoba.module.lambda_function_local.aws_lambda_function.this[0]" -auto-approve'''
+                            }
+                        }
+                        stage('Deploy Lambda 6 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda6-loadsuccess-preglue-initialjob.module.lambda_function_local.aws_lambda_function.this[0]" -auto-approve'''
+                            }
+                        }
+                        stage('Deploy Lambda 5 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda5-loaderr-deltajob.module.lambda_function_local.aws_lambda_function.this[0]" -auto-approve'''
+                            }
+                        }
+                        stage('Deploy Lambda 7 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda7-loaderr-initjob.module.lambda_function_local.aws_lambda_function.this[0]" -auto-approve'''
+                            }
+                        }
+
+                        stage('Deploy Lambda 8 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda8-postglue-identifystatus.module.lambda_function_local.aws_lambda_function.this[0]" -auto-approve'''
+                            }
+                        }
+                        stage('Deploy Lambda 9 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda9-postglue-errprocess.module.lambda_function_local.aws_lambda_function.this[0]" -auto-approve'''
+                            }
+                        }
+                        stage('Deploy Lambda 10 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda10-postglue-success_verify.module.lambda_function_local.aws_lambda_function.this[0]" -auto-approve'''
+                            }
+                        }
+                        stage('Deploy Lambda 11 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda11-postglue-afterverify.module.lambda_function_local.aws_lambda_function.this[0]" -auto-approve'''
+                            }
+                        }
+                        stage('Deploy Lambda 12 code updates'){
+                            when{
+                                environment name:'FIRST_DEPLOY',value:'N'
+                                environment name:'SKIPFLAG',value:'Y'
+                            }
+                            steps{
+                                sh '''
+                                terraform apply -replace="module.lambda12-sns_notifications.module.lambda_function_local.aws_lambda_function.this[0]" -auto-approve'''
+                            }
+                        }
+                    }                    
+            
+                }
+                //end parallel stage
+            }
+
+            
+        }
+
+        
+
+        stage("Destroy Infra"){
+            when{
+                environment name:'TERRADESTROY',value:'Y'
+            }
+            steps{
+                sh '''
+                    ls -a
+                    terraform init
+                    terraform destroy -auto-approve'''
+            }
+            post { 
+                always { 
+                    cleanWs()
+                }
+            }
+        }
+
+        
+    }
+
+
+}

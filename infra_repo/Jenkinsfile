@@ -1,0 +1,142 @@
+pipeline{
+    agent any
+    environment{
+        AWS_ACCESS_KEY_ID=credentials('awsaccesskey')
+        AWS_SECRET_ACCESS_KEY=credentials('awssecretkey')
+        AWS_DEFAULT_REGION="us-east-1"
+        SKIP="N"
+        TERRADESTROY="Y"
+        FIRST_DEPLOY="Y"
+    }
+
+    stages{
+        stage("Create Terraform State Buckets"){
+            when{
+                environment name:'FIRST_DEPLOY',value:'Y'
+            }
+            steps{
+                bat'''
+                aws s3 mb s3://<state_file_name>'''
+            }
+        }
+
+        stage("Deploy Infrastructure"){
+            parallel{
+                stage('Etl code infra'){
+                    when{
+                        environment name:'TERRADESTROY',value:'N'
+                    }
+                    stages{
+                        stage('Validate Infra'){
+                            steps{
+                                sh '''
+                                cd etl_code_infra
+                                terraform init
+                                terraform validate'''
+                            }
+                        }
+                        stage('Deploy etl code Infra'){
+                            steps{
+                                sh '''
+                                cd etl_code_infra
+                                terraform plan -out outfile
+                                terraform apply outfile'''
+                            }
+                        }
+                    }                    
+            
+                }
+
+                // Next stage
+                stage('Glue infra'){
+                    when{
+                        environment name:'TERRADESTROY',value:'N'
+                    }
+                    stages{
+                        stage('Validate Infra'){
+                            steps{
+                                sh '''
+                                cd glue_job_infra
+                                terraform init
+                                terraform validate'''
+                            }
+                        }
+                        stage('Deploy glue Infra'){
+                            steps{
+                                sh '''
+                                cd glue_job_infra
+                                terraform plan -out outfile
+                                terraform apply outfile'''
+                            }
+                        }
+                    }                    
+            
+                }
+
+                //next stage
+                stage('State Machine'){
+                    when{
+                        environment name:'TERRADESTROY',value:'N'
+                    }
+                    stages{
+                        stage('Validate Infra'){
+                            steps{
+                                sh '''
+                                cd state_machine_deploy
+                                terraform init
+                                terraform validate'''
+                            }
+                        }
+                        stage('Deploy state machine'){
+                            steps{
+                                sh '''
+                                cd state_machine_deploy
+                                terraform plan -out outfile
+                                terraform apply outfile'''
+                            }
+                        }
+                    }                    
+            
+                }
+
+            }
+        }
+
+        stage("Destroy etl code Infra"){
+            when{
+                environment name:'TERRADESTROY',value:'Y'
+            }
+            steps{
+                sh '''
+                    cd etl_code_infra
+                    terraform destroy -auto-approve
+                    '''
+            }
+        }
+
+        stage("Destroy Glue Infra"){
+            when{
+                environment name:'TERRADESTROY',value:'Y'
+            }
+            steps{
+                sh '''
+                    cd glue_job_infra
+                    terraform destroy -auto-approve'''
+            }
+        }
+
+        stage("Destroy State Machine"){
+            when{
+                environment name:'TERRADESTROY',value:'Y'
+            }
+            steps{
+                sh '''
+                    cd state_machine_deploy
+                    terraform destroy -auto-approve
+                    aws s3 rb s3://<state_file_name> --force'''
+            }
+        }
+    }
+
+
+}
